@@ -1,120 +1,233 @@
-import express from 'express';
-import cors from 'cors';
-import bodyParser from 'body-parser';
-import dotenv from 'dotenv';
-import { createClient } from '@supabase/supabase-js';
-import OpenAI from 'openai';
+import express from "express";
+import cors from "cors";
+import bodyParser from "body-parser";
+import dotenv from "dotenv";
+import { createClient } from "@supabase/supabase-js";
 
-// Load environment variables
+// Load env
 dotenv.config();
 
-// Validate environment variables
-if (!process.env.SUPABASE_URL || !process.env.SUPABASE_SERVICE_ROLE_KEY) {
-  throw new Error('Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY in .env file');
-}
-
-if (!process.env.OPENAI_API_KEY) {
-  console.warn('Missing OPENAI_API_KEY in .env file. AI features will be mocked.');
-}
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
-// Create Supabase client
-const supabase = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
-
 const app = express();
-const PORT = process.env.PORT || 5000;
 
 app.use(cors());
 app.use(bodyParser.json());
 
-// Webhook route: Clerk sends user.created events here
-app.post('/clerk/webhook', async (req, res) => {
-  const eventType = req.body.type;
+const PORT = process.env.PORT || 5000;
 
-  if (eventType === 'user.created') {
-    const user = req.body.data;
+// ================= ENV CHECK =================
 
-    console.log('Received user.created event from Clerk:', JSON.stringify(user, null, 2));
+const SUPABASE_URL = process.env.SUPABASE_URL!;
+const SUPABASE_SERVICE_ROLE_KEY =
+  process.env.SUPABASE_SERVICE_ROLE_KEY!;
 
-    const { id, email_addresses, phone_numbers, first_name, last_name, created_at } = user;
+const GEMINI_API_KEY =
+  process.env.GEMINI_API_KEY!;
 
-    const email = email_addresses?.[0]?.email_address || null;
-    const phone = phone_numbers?.[0]?.phone_number || null;
+if (!SUPABASE_URL) {
+  throw new Error("SUPABASE_URL missing");
+}
 
-    const { error } = await supabase.from('users').insert([
-      {
-        id,
-        email,
-        phone,
-        first_name,
-        last_name,
-        created_at,
-        is_approved: false, // 👈 New field to control access
-      },
-    ]);
+if (!SUPABASE_SERVICE_ROLE_KEY) {
+  throw new Error(
+    "SUPABASE_SERVICE_ROLE_KEY missing"
+  );
+}
 
-    if (error) {
-      console.error('❌ Error inserting user into Supabase:', error);
-      return res.status(500).json({ error: 'Failed to store user in Supabase' });
-    }
+if (!GEMINI_API_KEY) {
+  throw new Error("GEMINI_API_KEY missing");
+}
 
-    return res.status(200).json({ message: '✅ User stored in Supabase successfully' });
-  }
+// ================= SUPABASE =================
 
-  res.status(400).json({ message: '❌ Unsupported event type' });
-});
+const supabase = createClient(
+  SUPABASE_URL,
+  SUPABASE_SERVICE_ROLE_KEY
+);
 
-// New AI Prescription Route
-app.post('/api/ai/generate-prescription', async (req, res) => {
-  const { symptoms, medicalHistory } = req.body;
+// ================= CLERK WEBHOOK =================
 
-  if (!symptoms || !medicalHistory) {
-    return res.status(400).json({ error: 'Symptoms and medical history are required.' });
-  }
-
-  if (!process.env.OPENAI_API_KEY) {
-    // Mock response if OpenAI API key is not available
-    console.log('OpenAI API key not found, returning mocked prescription.');
-    const mockPrescription = `Mocked Prescription based on:\nSymptoms: ${symptoms}\nMedical History: ${medicalHistory}\n\nThis is a placeholder response because the OpenAI API key is not configured.`;
-    return res.status(200).json({ prescription: mockPrescription });
-  }
+app.post("/clerk/webhook", async (req, res) => {
 
   try {
-    const prompt = `Generate a medical prescription based on the following patient information. Format the output clearly, including Diagnosis, Medications (with dosage and instructions), and Follow-up Advice. 
 
-Patient Symptoms: ${symptoms}
+    const eventType = req.body.type;
 
-Medical History: ${medicalHistory}
+    if (eventType !== "user.created") {
 
-Prescription:`;
+      return res.status(400).json({
+        message: "Unsupported event type",
+      });
 
-    const completion = await openai.chat.completions.create({
-      model: "gpt-3.5-turbo", // Or your preferred model, e.g., gpt-4
-      messages: [{ role: "user", content: prompt }],
-      max_tokens: 300, // Adjust as needed
-      temperature: 0.5, // Adjust for creativity vs. determinism
-    });
-
-    const prescription = completion.choices[0]?.message?.content?.trim();
-
-    if (!prescription) {
-      throw new Error('Failed to generate prescription from OpenAI.');
     }
 
-    res.status(200).json({ prescription });
+    const user = req.body.data;
+
+    const {
+      id,
+      email_addresses,
+      phone_numbers,
+      first_name,
+      last_name,
+      created_at,
+    } = user;
+
+    const email =
+      email_addresses?.[0]?.email_address || null;
+
+    const phone =
+      phone_numbers?.[0]?.phone_number || null;
+
+    const { error } = await supabase
+      .from("users")
+      .insert([
+        {
+          id,
+          email,
+          phone,
+          first_name,
+          last_name,
+          created_at,
+          is_approved: false,
+        },
+      ]);
+
+    if (error) {
+
+      console.error(error);
+
+      return res.status(500).json({
+        error: "Failed to store user",
+      });
+
+    }
+
+    return res.status(200).json({
+      message: "User stored successfully",
+    });
 
   } catch (error) {
-    console.error('Error calling OpenAI API:', error);
-    res.status(500).json({ error: 'Failed to generate AI prescription.' });
+
+    console.error(error);
+
+    return res.status(500).json({
+      error: "Webhook failed",
+    });
+
   }
+
 });
 
+// ================= AI ROUTE =================
+
+app.post(
+  "/api/ai/generate-prescription",
+  async (req, res) => {
+
+    try {
+
+      const {
+        symptoms,
+        medicalHistory,
+      } = req.body;
+
+      if (
+        !symptoms ||
+        !medicalHistory
+      ) {
+
+        return res.status(400).json({
+          error:
+            "Symptoms and medical history are required",
+        });
+
+      }
+
+      const prompt = `
+Generate a professional medical prescription.
+
+Patient Symptoms:
+${symptoms}
+
+Medical History:
+${medicalHistory}
+
+Format:
+1. Diagnosis
+2. Medicines with dosage
+3. Instructions
+4. Follow-up advice
+`;
+
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type":
+              "application/json",
+          },
+          body: JSON.stringify({
+            contents: [
+              {
+                parts: [
+                  {
+                    text: prompt,
+                  },
+                ],
+              },
+            ],
+          }),
+        }
+      );
+
+      const data = await response.json();
+
+      console.log(
+        "Gemini Response:",
+        JSON.stringify(data, null, 2)
+      );
+
+      const prescription =
+        data?.candidates?.[0]
+          ?.content?.parts?.[0]?.text;
+
+      if (!prescription) {
+
+        return res.status(500).json({
+          error:
+            data?.error?.message ||
+            "No response from Gemini",
+        });
+
+      }
+
+      return res.status(200).json({
+        prescription,
+      });
+
+    } catch (error) {
+
+      console.error(
+        "Gemini Error:",
+        error
+      );
+
+      return res.status(500).json({
+        error:
+          "Failed to generate prescription",
+      });
+
+    }
+
+  }
+);
+
+// ================= START =================
+
 app.listen(PORT, () => {
-  console.log(`🚀 Server listening on port ${PORT}`);
+
+  console.log(
+    `🚀 Server listening on port ${PORT}`
+  );
+
 });
