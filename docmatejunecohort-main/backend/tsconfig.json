@@ -1,0 +1,18 @@
+{
+    "compilerOptions": {
+      "target": "es6",                        // Target modern JavaScript
+      "module": "commonjs",                   // Node uses CommonJS by default
+      "rootDir": "src",                       // Your source files live in /src
+      "outDir": "dist",                       // Compiled JS goes here
+      "strict": true,                         // Enable strict type-checking
+      "esModuleInterop": true,                // Allow `import express from 'express'`
+      "forceConsistentCasingInFileNames": true,
+      "skipLibCheck": true,
+      "moduleResolution": "node",             // Node-style module resolution
+      "resolveJsonModule": true,              // Allow importing .json files
+      "types": ["node", "express"]            // Include Node.js and Express types
+    },
+    "include": ["src"],
+    "exclude": ["node_modules", "dist"]
+  }
+  
