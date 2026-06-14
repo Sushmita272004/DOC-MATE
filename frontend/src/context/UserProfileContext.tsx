@@ -16,19 +16,37 @@ const UserProfileContext = createContext<UserProfileContextType | undefined>(und
 
 export const UserProfileProvider = ({ children }: { children: ReactNode }) => {
   const { user } = useUser();
+
   const [profile, setProfile] = useState<Profile>({
     fullName: "",
-    specialization: "Cardiologist",
+    specialization: "",
     email: "",
   });
 
   useEffect(() => {
     if (user) {
-      setProfile((prev) => ({
-        ...prev,
-        fullName: user.fullName || "",
-        email: user.primaryEmailAddress?.emailAddress || "",
-      }));
+      const prefix = `user_${user.id}`;
+      const isInitialized = localStorage.getItem(`${prefix}_initialized`);
+
+      if (isInitialized) {
+        // ── Returning user → always load from localStorage ──
+        const storedName = localStorage.getItem(`${prefix}_fullName`) || user.fullName || "";
+        const storedSpec = localStorage.getItem(`${prefix}_specialization`) || "";
+        const storedEmail = localStorage.getItem(`${prefix}_email`) || user.primaryEmailAddress?.emailAddress || "";
+
+        setProfile({
+          fullName: storedName,
+          specialization: storedSpec,
+          email: storedEmail,
+        });
+      } else {
+        // ── First-time login → use Clerk data ──
+        setProfile({
+          fullName: user.fullName || "",
+          specialization: "",
+          email: user.primaryEmailAddress?.emailAddress || "",
+        });
+      }
     }
   }, [user]);
 

@@ -1,86 +1,114 @@
-
 import { Card } from "@/components/ui/card";
+import { useEffect, useState } from "react";
+import { supabase } from "../../lib/supabaseClient";
+
+interface FeedItem {
+  id: string;
+  type: "patient" | "appointment" | "prescription";
+  title: string;
+  description: string;
+  timestamp: Date;
+}
 
 const ActivityFeed = () => {
-  const activities = [
-    {
-      id: 1,
-      type: "voice_booking",
-      title: "Voice appointment booked",
-      description: "Patient: Maria Rodriguez - Cardiology consultation scheduled for tomorrow 2:30 PM",
-      timestamp: "2 minutes ago",
-      icon: "microphone",
-      color: "cyan"
-    },
-    {
-      id: 2,
-      type: "ai_prescription",
-      title: "AI prescription generated",
-      description: "Hypertension treatment plan created for John Smith - 95% confidence",
-      timestamp: "5 minutes ago",
-      icon: "pills",
-      color: "green"
-    },
-    {
-      id: 3,
-      type: "patient_checkin",
-      title: "Patient checked in",
-      description: "Emma Johnson arrived for 2:00 PM appointment - Room 205",
-      timestamp: "8 minutes ago",
-      icon: "user",
-      color: "blue"
-    },
-    {
-      id: 4,
-      type: "prescription_modified",
-      title: "Prescription modified",
-      description: "Dr. Chen adjusted dosage for Robert Davis - AI learning updated",
-      timestamp: "12 minutes ago",
-      icon: "edit",
-      color: "amber"
-    },
-    {
-      id: 5,
-      type: "voice_command",
-      title: "Voice command processed",
-      description: "\"Schedule follow-up for Sarah Wilson in 2 weeks\" - Completed successfully",
-      timestamp: "15 minutes ago",
-      icon: "voice",
-      color: "purple"
-    },
-    {
-      id: 6,
-      type: "system_update",
-      title: "System learning improved",
-      description: "AI accuracy increased to 98.5% based on recent doctor modifications",
-      timestamp: "20 minutes ago",
-      icon: "brain",
-      color: "indigo"
-    }
-  ];
+  const [feed, setFeed] = useState<FeedItem[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const getIcon = (iconName: string) => {
-    const icons = {
-      microphone: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z" />,
-      pills: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />,
-      user: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />,
-      edit: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />,
-      voice: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />,
-      brain: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-    };
-    return icons[iconName as keyof typeof icons];
+  useEffect(() => {
+    fetchActivity();
+
+    // Auto-refresh every 30 seconds
+    const interval = setInterval(fetchActivity, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const fetchActivity = async () => {
+    const [{ data: patients }, { data: appointments }, { data: prescriptions }] =
+      await Promise.all([
+        supabase
+          .from("patients")
+          .select("id, name, disease, created_at")
+          .order("created_at", { ascending: false })
+          .limit(5),
+        supabase
+          .from("appointments")
+          .select("id, appointment_type, doctor_name, status, appointment_date, created_at")
+          .order("created_at", { ascending: false })
+          .limit(5),
+        supabase
+          .from("prescriptions")
+          .select("id, medication_name, status, created_at, patient_id")
+          .order("created_at", { ascending: false })
+          .limit(5),
+      ]);
+
+    const items: FeedItem[] = [];
+
+    (patients ?? []).forEach((p) => {
+      items.push({
+        id: `p-${p.id}`,
+        type: "patient",
+        title: "New patient added",
+        description: `${p.name} was registered${p.disease ? ` — ${p.disease}` : ""}`,
+        timestamp: new Date(p.created_at),
+      });
+    });
+
+    (appointments ?? []).forEach((a) => {
+      items.push({
+        id: `a-${a.id}`,
+        type: "appointment",
+        title: "Appointment scheduled",
+        description: `${a.appointment_type ?? "Appointment"} with Dr. ${a.doctor_name} — ${a.status}`,
+        timestamp: new Date(a.created_at),
+      });
+    });
+
+    (prescriptions ?? []).forEach((pr) => {
+      items.push({
+        id: `pr-${pr.id}`,
+        type: "prescription",
+        title: "Prescription created",
+        description: `${pr.medication_name} — status: ${pr.status}`,
+        timestamp: new Date(pr.created_at),
+      });
+    });
+
+    // Sort all by most recent first, take top 8
+    items.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime());
+    setFeed(items.slice(0, 8));
+    setLoading(false);
   };
 
-  const getColorClasses = (color: string) => {
-    const colors = {
-      cyan: "bg-cyan-500 border-cyan-400",
-      green: "bg-green-500 border-green-400",
-      blue: "bg-blue-500 border-blue-400",
-      amber: "bg-amber-500 border-amber-400",
-      purple: "bg-purple-500 border-purple-400",
-      indigo: "bg-indigo-500 border-indigo-400"
-    };
-    return colors[color as keyof typeof colors];
+  const timeAgo = (date: Date) => {
+    const diff = Math.floor((Date.now() - date.getTime()) / 1000);
+    if (diff < 60) return `${diff}s ago`;
+    if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+    if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
+    return `${Math.floor(diff / 86400)}d ago`;
+  };
+
+  const getStyle = (type: FeedItem["type"]) => {
+    switch (type) {
+      case "patient":
+        return {
+          bg: "bg-blue-500/10 border border-blue-500/30",
+          icon: "text-blue-400",
+          path: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />,
+        };
+      case "appointment":
+        return {
+          bg: "bg-green-500/10 border border-green-500/30",
+          icon: "text-green-400",
+          path: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />,
+        };
+      case "prescription":
+        return {
+          bg: "bg-emerald-500/10 border border-emerald-500/30",
+          icon: "text-emerald-400",
+          path: <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />,
+        };
+    }
   };
 
   return (
@@ -88,34 +116,60 @@ const ActivityFeed = () => {
       <div className="flex items-center justify-between mb-6">
         <h3 className="text-xl font-semibold text-white">Real-Time Activity Feed</h3>
         <div className="flex items-center space-x-2">
-          <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+          <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse" />
           <span className="text-sm text-gray-400">Live</span>
         </div>
       </div>
 
-      <div className="space-y-4 max-h-96 overflow-y-auto">
-        {activities.map((activity, index) => (
-          <div key={activity.id} className="flex items-start space-x-4 p-4 rounded-lg bg-gray-800 bg-opacity-50 hover:bg-opacity-70 transition-all duration-200">
-            <div className={`p-2 rounded-lg ${getColorClasses(activity.color)} bg-opacity-20 border`}>
-              <svg className={`w-5 h-5 text-${activity.color}-400`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                {getIcon(activity.icon)}
-              </svg>
-            </div>
-            
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between">
-                <h4 className="text-white font-medium">{activity.title}</h4>
-                <span className="text-gray-400 text-sm">{activity.timestamp}</span>
+      <div className="space-y-3 max-h-96 overflow-y-auto pr-1">
+        {loading ? (
+          // Skeleton loading
+          Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="flex items-start space-x-4 p-4 rounded-lg bg-gray-800/50 animate-pulse">
+              <div className="w-9 h-9 rounded-lg bg-gray-700 flex-shrink-0" />
+              <div className="flex-1 space-y-2">
+                <div className="h-4 bg-gray-700 rounded w-1/3" />
+                <div className="h-3 bg-gray-700 rounded w-2/3" />
               </div>
-              <p className="text-gray-300 text-sm mt-1">{activity.description}</p>
             </div>
+          ))
+        ) : feed.length === 0 ? (
+          <div className="text-center py-12 text-gray-500">
+            <p>No recent activity yet.</p>
+            <p className="text-xs mt-1">Add patients, appointments or prescriptions to see activity here.</p>
           </div>
-        ))}
+        ) : (
+          feed.map((item) => {
+            const style = getStyle(item.type);
+            return (
+              <div
+                key={item.id}
+                className="flex items-start space-x-4 p-4 rounded-lg bg-gray-800/50 hover:bg-gray-800/80 transition-all duration-200"
+              >
+                <div className={`p-2 rounded-lg flex-shrink-0 ${style.bg}`}>
+                  <svg className={`w-5 h-5 ${style.icon}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    {style.path}
+                  </svg>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between gap-2">
+                    <h4 className="text-white font-medium text-sm">{item.title}</h4>
+                    <span className="text-gray-500 text-xs flex-shrink-0">{timeAgo(item.timestamp)}</span>
+                  </div>
+                  <p className="text-gray-400 text-sm mt-0.5 truncate">{item.description}</p>
+                </div>
+              </div>
+            );
+          })
+        )}
       </div>
 
       <div className="mt-4 pt-4 border-t border-gray-700">
-        <button className="w-full text-center text-cyan-400 hover:text-cyan-300 text-sm font-medium">
-          View All Activities
+        <button
+          onClick={fetchActivity}
+          className="w-full text-center text-cyan-400 hover:text-cyan-300 text-sm font-medium transition-colors"
+        >
+          Refresh Activity
         </button>
       </div>
     </Card>

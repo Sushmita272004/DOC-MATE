@@ -5,22 +5,49 @@ import Footer from "./Footer";
 
 interface MainLayoutProps {
   children: ReactNode;
-  onLogout: () => void; // 👈 Add this
+  onLogout?: () => void;
 }
 
-const MainLayout = ({ children, onLogout }: MainLayoutProps) => {
+const MainLayout = ({
+  children,
+  onLogout,
+}: MainLayoutProps) => {
+
   return (
-    <div className="min-h-screen flex flex-col dark:bg-gradient-to-b dark:from-black dark:to-gray-900 light:bg-gradient-to-b light:from-cream-50 light:to-cream-100">
-      <Header onLogout={onLogout} /> {/* 👈 Pass it to Header */}
+
+    <div className="
+      min-h-screen
+      flex
+      flex-col
+      bg-[#F4F7FB]
+    ">
+
+      {/* Header */}
+      <Header onLogout={onLogout} />
+
+      {/* Main Content */}
       <div className="flex flex-1">
+
         <Sidebar />
-        <main className="flex-1 p-6">
+      
+        {/* Page Content */}
+        <main className="
+          flex-1
+          p-6
+          overflow-y-auto
+        ">
           {children}
         </main>
+
       </div>
+
+      {/* Footer */}
       <Footer />
+
     </div>
+
   );
+
 };
 
 export default MainLayout;
